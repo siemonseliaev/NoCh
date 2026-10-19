@@ -48,7 +48,7 @@ class TestConfigValidation(unittest.TestCase):
         (например, строка вместо int для max_depth).
         """
         invalid_config = self.valid_config.copy()
-        invalid_config["max_depth"] = "three"  # Ожидается int
+        invalid_config["max_depth"] = "three"
 
         with self.assertRaises(TypeError):
             validate_config(invalid_config)
@@ -59,8 +59,6 @@ class TestConfigValidation(unittest.TestCase):
         если ожидается int.
         """
         invalid_config = self.valid_config.copy()
-        # В Python bool является подклассом int,
-        # проверяем обработку
         invalid_config["max_depth"] = True
 
         with self.assertRaises(TypeError):
