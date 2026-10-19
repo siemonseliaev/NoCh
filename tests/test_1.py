@@ -10,6 +10,7 @@ from TryKonf import validate_config, load_config
 
 
 class TestConfigValidation(unittest.TestCase):
+    """Тесты для валидации конфигурации."""
 
     def set_up(self):
         """Базовый корректный словарь конфигурации для тестов."""
@@ -42,8 +43,8 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_invalid_type(self):
-        """
-        Тест: ошибка при неверном типе данных
+        """Тест: ошибка при неверном типе данных
+
         (например, строка вместо int для max_depth).
         """
         invalid_config = self.valid_config.copy()
@@ -53,8 +54,8 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_bool_as_int(self):
-        """
-        Тест: boolean не должен проходить валидацию,
+        """Тест: boolean не должен проходить валидацию,
+
         если ожидается int.
         """
         invalid_config = self.valid_config.copy()
