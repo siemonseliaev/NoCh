@@ -10,10 +10,8 @@ from TryKonf import validate_config, load_config
 
 
 class TestConfigValidation(unittest.TestCase):
-    """Тесты для валидации конфигурации."""
 
-    def set_up(self):
-        """Базовый корректный словарь конфигурации для тестов."""
+    def setUp(self):
         self.valid_config = {
             "package_name": "test_package",
             "repo_url": "https://github.com/example/test",
@@ -23,10 +21,7 @@ class TestConfigValidation(unittest.TestCase):
             "max_depth": 3,
         }
 
-    setUp = set_up
-
     def test_validate_config_success(self):
-        """Тест на успешную валидацию корректного конфига."""
         try:
             validate_config(self.valid_config)
         except Exception as e:
@@ -35,7 +30,6 @@ class TestConfigValidation(unittest.TestCase):
             )
 
     def test_missing_field(self):
-        """Тест: ошибка при отсутствии обязательного поля."""
         invalid_config = self.valid_config.copy()
         del invalid_config["package_name"]
 
@@ -43,10 +37,6 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_invalid_type(self):
-        """Тест: ошибка при неверном типе данных
-
-        (например, строка вместо int для max_depth).
-        """
         invalid_config = self.valid_config.copy()
         invalid_config["max_depth"] = "three"
 
@@ -54,10 +44,6 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_bool_as_int(self):
-        """Тест: boolean не должен проходить валидацию,
-
-        если ожидается int.
-        """
         invalid_config = self.valid_config.copy()
         invalid_config["max_depth"] = True
 
@@ -65,7 +51,6 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_negative_max_depth(self):
-        """Тест: ошибка, если max_depth меньше 0."""
         invalid_config = self.valid_config.copy()
         invalid_config["max_depth"] = -1
 
@@ -73,7 +58,6 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_invalid_repo_mode(self):
-        """Тест: ошибка при недопустимом значении repo_mode."""
         invalid_config = self.valid_config.copy()
         invalid_config["repo_mode"] = "super_mode"
 
@@ -81,7 +65,6 @@ class TestConfigValidation(unittest.TestCase):
             validate_config(invalid_config)
 
     def test_file_not_found(self):
-        """Тест: ошибка, если конфигурационный файл не существует."""
         with self.assertRaises(FileNotFoundError):
             load_config("non_existent_config_file_12345.toml")
 
