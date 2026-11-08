@@ -1,7 +1,7 @@
-package_name = "my_awesome_package"
+package_name = "serde"
 repo_url = "https://github.com/example/repo"
-repo_mode = "online"
-package_version = "1.0.0"
+repo_mode = "test"
+package_version = "1.0.200"
 output_image = "output.png"
 max_depth = 3
 

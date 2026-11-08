@@ -1,5 +1,5 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 import tomllib
 
 CONFIG_FILE = "config.toml"
@@ -12,7 +12,9 @@ def load_config(file_path: str) -> dict:
     config_path = curr_dir / file_path
 
     if not config_path.exists():
-        raise FileNotFoundError(f"Файл конфигурации '{file_path}' не найден.")
+        raise FileNotFoundError(
+            f"Файл конфигурации '{file_path}' не найден."
+        )
 
     try:
         with open(config_path, "rb") as file_obj:
@@ -22,7 +24,7 @@ def load_config(file_path: str) -> dict:
 
 
 def validate_config(config: dict) -> None:
-    """Проверяет наличие и корректность типов обязательных параметров конфигурации."""
+    """Проверяет наличие и корректность типов всех обязательных параметров."""
     req_fields = {
         "package_name": str,
         "repo_url": str,
@@ -34,19 +36,25 @@ def validate_config(config: dict) -> None:
 
     for field, exp_type in req_fields.items():
         if field not in config:
-            raise KeyError(f"Отсутствует обязательный параметр: '{field}'")
+            raise KeyError(
+                f"Отсутствует обязательный параметр: '{field}'"
+            )
 
         val = config[field]
-        # Защита от передачи булева значения туда, где ожидается целое число
         is_bool = isinstance(val, bool)
-        if not isinstance(val, exp_type) or (exp_type is int and is_bool):
+        if not isinstance(val, exp_type) or (
+            exp_type is int and is_bool
+        ):
             raise TypeError(
-                f"Неверный тип параметра '{field}'. "
-                f"Ожидался {exp_type.__name__}, получен {type(val).__name__}"
+                f"Неверный тип для параметра '{field}'. "
+                f"Ожидался {exp_type.__name__}, "
+                f"получен {type(val).__name__}"
             )
 
     if config["max_depth"] < ZERO_LIMIT:
-        raise ValueError("Параметр 'max_depth' не может быть отрицательным (< 0).")
+        raise ValueError(
+            "Параметр 'max_depth' не может быть меньше 0."
+        )
 
     valid_modes = ["online", "offline", "test"]
     if config["repo_mode"] not in valid_modes:
@@ -57,14 +65,15 @@ def validate_config(config: dict) -> None:
 
 
 def main() -> None:
-    """Точка входа CLI-приложения (Этап 1)."""
+    """Точка входа приложения (Этап 1)."""
+    print("=== Этап 1: Минимальный прототип с конфигурацией ===")
     try:
         config = load_config(CONFIG_FILE)
         validate_config(config)
 
-        print("\nНастраиваемые параметры пользователя:")
+        print("\n[Успешно] Параметры конфигурации:")
         for key, value in config.items():
-            print(f"  {key} = {value}")
+            print(f"{key} = {value}")
 
     except (
         FileNotFoundError,
@@ -72,7 +81,10 @@ def main() -> None:
         KeyError,
         TypeError,
     ) as err:
-        print(f"\n[ОШИБКА]: {err}", file=sys.stderr)
+        print(
+            f"\n[ОШИБКА]: {err}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
