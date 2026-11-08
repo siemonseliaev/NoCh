@@ -1,9 +1,26 @@
-package_name = "test_graph.json"
-repo_url = "local_test"
+package_name = "serde"
+repo_url = "https://github.com/example/repo"
 repo_mode = "test"
-package_version = "1.0.0"
+package_version = "1.0.200"
 output_image = "output.png"
 max_depth = 3
-reverse_target = "A"
 
-title = "Приложение для анализа зависимостей (Этап 4)"
+title = "Приложение для управления проектом"
+
+[owner]
+name = "Иван Иванов"
+email = "ivan@example.com"
+
+[database]
+server = "192.168.1.1"
+ports = [ 8000, 8001, 8002 ]
+connection_max = 5000
+enabled = true
+
+[servers.alpha]
+ip = "10.0.0.1"
+dc = "eqdc10"
+
+[servers.beta]
+ip = "10.0.0.2"
+dc = "eqdc11"
