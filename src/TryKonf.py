@@ -128,6 +128,28 @@ def process_dependencies(
         return fetch_online_dependencies(pkg, ver)
 
 
+def process_node_dependencies(
+        pkg: str,
+        ver: str,
+        mode: str,
+        pkg_map: dict,
+        ctx: tuple
+) -> None:
+    """Обрабатывает дочерние зависимости текущего узла."""
+    current_path, depth, max_depth, visited, graph, stack = ctx
+    raw_deps = process_dependencies(pkg, ver, mode, pkg_map)
+
+    for dep in raw_deps:
+        if dep not in graph[pkg]:
+            graph[pkg].append(dep)
+        if dep in current_path:
+            print(f"Циклическая зависимость: {pkg} -> {dep}")
+            continue
+        if depth + 1 < max_depth and dep not in visited:
+            new_path = current_path | {dep}
+            stack.append((dep, "latest", depth + 1, new_path))
+
+
 def build_dependency_graph_dfs(
         root_pkg: str,
         root_ver: str,
@@ -136,8 +158,7 @@ def build_dependency_graph_dfs(
         pkg_map: dict
 ) -> tuple[dict[str, list[str]], set[str]]:
     """Строит граф зависимостей с помощью нерекурсивного DFS."""
-    graph = {}
-    visited_global = set()
+    graph, visited = {}, set()
     stack = [(root_pkg, root_ver, 0, {root_pkg})]
 
     print(
@@ -147,47 +168,18 @@ def build_dependency_graph_dfs(
 
     while stack:
         pkg, ver, depth, current_path = stack.pop()
-
         if pkg not in graph:
             graph[pkg] = []
-
         if depth >= max_depth:
             continue
-
         try:
-            raw_deps = process_dependencies(
-                pkg, ver, mode, pkg_map
-            )
-
-            for dep in raw_deps:
-                if dep not in graph[pkg]:
-                    graph[pkg].append(dep)
-
-                if dep in current_path:
-                    print(
-                        f"Циклическая зависимость "
-                        f"обнаружена: {pkg} -> {dep}"
-                    )
-                    continue
-
-                if (
-                        depth + 1 < max_depth
-                        and dep not in visited_global
-                ):
-                    new_path = current_path | {dep}
-                    stack.append(
-                        (dep, "latest", depth + 1, new_path)
-                    )
-
-            visited_global.add(pkg)
-
+            ctx = (current_path, depth, max_depth, visited, graph, stack)
+            process_node_dependencies(pkg, ver, mode, pkg_map, ctx)
+            visited.add(pkg)
         except Exception as err:
-            print(
-                f"Предупреждение: не удалось "
-                f"получить зависимости для {pkg}: {err}"
-            )
+            print(f"Ошибка обработки узла {pkg}: {err}")
 
-    return graph, visited_global
+    return graph, visited
 
 
 def main() -> None:
