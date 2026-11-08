@@ -14,9 +14,7 @@ def load_config(file_path: str) -> dict:
     config_path = curr_dir / file_path
 
     if not config_path.exists():
-        raise FileNotFoundError(
-            f"Файл '{file_path}' не найден."
-        )
+        raise FileNotFoundError(f"Файл '{file_path}' не найден.")
 
     try:
         with open(config_path, "rb") as file_obj:
@@ -38,14 +36,12 @@ def validate_config(config: dict) -> None:
 
     for field, exp_type in req_fields.items():
         if field not in config:
-            raise KeyError(
-                f"Отсутствует параметр: '{field}'"
-            )
+            raise KeyError(f"Отсутствует параметр: '{field}'")
 
         val = config[field]
         is_bool = isinstance(val, bool)
         if not isinstance(val, exp_type) or (
-            exp_type is int and is_bool
+                exp_type is int and is_bool
         ):
             raise TypeError(
                 f"Неверный тип '{field}'. "
@@ -54,9 +50,7 @@ def validate_config(config: dict) -> None:
             )
 
     if config["max_depth"] < ZERO_LIMIT:
-        raise ValueError(
-            "Параметр 'max_depth' < 0."
-        )
+        raise ValueError("Параметр 'max_depth' < 0.")
 
     valid_modes = ["online", "offline", "test"]
     if config["repo_mode"] not in valid_modes:
@@ -66,142 +60,170 @@ def validate_config(config: dict) -> None:
         )
 
 
-def fetch_test_dependencies() -> list[str]:
-    """Возвращает тестовые зависимости для режима test."""
-    print("[Режим TEST] Тестовые данные.")
-    return ["serde = \"1.0\"", "tokio = \"1.28\""]
+def fetch_test_graph_data(file_path: str) -> dict:
+    """Загружает граф тестового репозитория."""
+    local_path = Path(file_path)
+    if not local_path.exists():
+        raise FileNotFoundError(
+            f"Тестовый файл графа не найден: {file_path}"
+        )
+
+    try:
+        with open(local_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as err:
+        raise ValueError(f"Ошибка чтения тестового файла: {err}")
 
 
-def fetch_offline_dependencies(
-    package_name: str
-) -> list[str]:
+def fetch_offline_dependencies(package_name: str) -> dict:
     """Возвращает зависимости в офлайн-режиме."""
-    print("[Режим OFFLINE] Чтение файла...")
-    dependencies = []
     local_path = Path(package_name)
     if local_path.exists() and local_path.is_file():
         with open(local_path, "rb") as file_obj:
             data = tomllib.load(file_obj)
             deps = data.get("dependencies", {})
-            for dep, ver in deps.items():
-                dependencies.append(
-                    f"{dep} = \"{ver}\""
-                )
-        return dependencies
-    raise FileNotFoundError(
-        f"Файл не найден: {local_path}"
-    )
+            return {dep: [ver] for dep, ver in deps.items()}
+    raise FileNotFoundError(f"Файл не найден: {local_path}")
 
 
 def fetch_online_dependencies(
-    package_name: str,
-    version: str
+        package_name: str,
+        version: str
 ) -> list[str]:
     """Загружает прямые зависимости с crates.io."""
     dependencies = []
     base_url = "https://crates.io/api/v1/crates"
-    api_url = (
-        f"{base_url}/{package_name}/"
-        f"{version}/dependencies"
-    )
-    headers = {
-        "User-Agent": "DependencyAnalyzerCLI"
-    }
-    req = urllib.request.Request(
-        api_url,
-        headers=headers
-    )
+    api_url = f"{base_url}/{package_name}/{version}/dependencies"
+    headers = {"User-Agent": "DependencyAnalyzerCLI"}
+    req = urllib.request.Request(api_url, headers=headers)
 
-    print(
-        f"[Режим ONLINE] Запрос к API "
-        f"для {package_name} ({version})..."
-    )
     try:
         with urllib.request.urlopen(req) as resp:
-            data = json.loads(
-                resp.read().decode("utf-8")
-            )
+            data = json.loads(resp.read().decode("utf-8"))
             for dep in data.get("dependencies", []):
                 dep_name = dep.get("crate_id")
-                dep_req = dep.get("requirement")
                 kind = dep.get("kind")
                 if kind in ("normal", "dev"):
-                    dependencies.append(
-                        f"{dep_name} = "
-                        f"\"{dep_req}\" ({kind})"
-                    )
+                    dependencies.append(dep_name)
     except Exception as err:
         raise RuntimeError(
-            f"Ошибка API crates.io: {err}"
+            f"Ошибка API crates.io для {package_name}: {err}"
         )
 
     return dependencies
 
 
-def fetch_cargo_dependencies(
-    package_name: str,
-    version: str,
-    mode: str
+def process_dependencies(
+        pkg: str,
+        ver: str,
+        mode: str,
+        pkg_map: dict
 ) -> list[str]:
-    """Получает прямые зависимости Cargo-пакета."""
+    """Получает список зависимостей узла в зависимости от режима."""
     if mode == "test":
-        return fetch_test_dependencies()
-    if mode == "offline":
-        return fetch_offline_dependencies(
-            package_name
-        )
-    return fetch_online_dependencies(
-        package_name,
-        version
+        return pkg_map.get(pkg, [])
+    elif mode == "offline":
+        return list(fetch_offline_dependencies(pkg).keys())
+    else:
+        return fetch_online_dependencies(pkg, ver)
+
+
+def build_dependency_graph_dfs(
+        root_pkg: str,
+        root_ver: str,
+        mode: str,
+        max_depth: int,
+        pkg_map: dict
+) -> tuple[dict[str, list[str]], set[str]]:
+    """Строит граф зависимостей с помощью нерекурсивного DFS."""
+    graph = {}
+    visited_global = set()
+    stack = [(root_pkg, root_ver, 0, {root_pkg})]
+
+    print(
+        f"\n[Этап 3] Построение графа (DFS, "
+        f"max_depth={max_depth}, mode={mode})..."
     )
+
+    while stack:
+        pkg, ver, depth, current_path = stack.pop()
+
+        if pkg not in graph:
+            graph[pkg] = []
+
+        if depth >= max_depth:
+            continue
+
+        try:
+            raw_deps = process_dependencies(
+                pkg, ver, mode, pkg_map
+            )
+
+            for dep in raw_deps:
+                if dep not in graph[pkg]:
+                    graph[pkg].append(dep)
+
+                if dep in current_path:
+                    print(
+                        f"Циклическая зависимость "
+                        f"обнаружена: {pkg} -> {dep}"
+                    )
+                    continue
+
+                if (
+                        depth + 1 < max_depth
+                        and dep not in visited_global
+                ):
+                    new_path = current_path | {dep}
+                    stack.append(
+                        (dep, "latest", depth + 1, new_path)
+                    )
+
+            visited_global.add(pkg)
+
+        except Exception as err:
+            print(
+                f"Предупреждение: не удалось "
+                f"получить зависимости для {pkg}: {err}"
+            )
+
+    return graph, visited_global
 
 
 def main() -> None:
     """Точка входа CLI-приложения."""
-    print("=== Инициализация CLI (Этап 2) ===")
+    print("=== Инициализация CLI (Этап 3) ===")
     try:
         config = load_config(CONFIG_FILE)
         validate_config(config)
 
-        print("\n[Успешно] Конфигурация:")
-        for key, value in config.items():
-            print(f"  - {key} = {value}")
-
-        print("\n--- Сбор зависимостей (Cargo) ---")
         pkg_name = config["package_name"]
         pkg_version = config["package_version"]
         repo_mode = config["repo_mode"]
+        max_depth = config["max_depth"]
 
-        dependencies = fetch_cargo_dependencies(
-            pkg_name,
-        pkg_version,
-        repo_mode
+        pkg_map = {}
+        if repo_mode == "test":
+            pkg_map = fetch_test_graph_data(pkg_name)
+
+        graph, _ = build_dependency_graph_dfs(
+            pkg_name, pkg_version, repo_mode, max_depth, pkg_map
         )
 
-        print(
-            f"\nПрямые зависимости пакета "
-            f"'{pkg_name}' ({pkg_version}):"
-        )
-        if dependencies:
-            for dep in dependencies:
-                print(f"  + {dep}")
-        else:
-            print("  (Зависимости не найдены)")
+        print(f"\nРезультат построения графа (Узлов: {len(graph)}):")
+        for parent, children in graph.items():
+            print(f"  {parent} -> {children}")
 
     except (
-        FileNotFoundError,
-        ValueError,
-        KeyError,
-        TypeError,
-        RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            KeyError,
+            TypeError,
+            RuntimeError,
     ) as err:
-        print(
-            f"\n[ОШИБКА]: {err}",
-            file=sys.stderr,
-        )
+        print(f"\n[ОШИБКА]: {err}", file=sys.stderr)
         sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
-
