@@ -4,5 +4,6 @@ repo_mode = "test"
 package_version = "1.0.0"
 output_image = "output.png"
 max_depth = 3
+reverse_target = "A"
 
-title = "Приложение для анализа зависимостей (Этап 3)"
+title = "Приложение для анализа зависимостей (Этап 4)"

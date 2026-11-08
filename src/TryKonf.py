@@ -23,6 +23,25 @@ def load_config(file_path: str) -> dict:
         raise ValueError(f"Ошибка синтаксиса TOML: {err}")
 
 
+def get_reverse_dependencies(graph: dict[str, list[str]], root_pkg: str) -> dict[str, list[str]]:
+    """Строит граф обратных зависимостей (кто зависит от данного узла),
+    исключая технический корневой узел (имя файла).
+    """
+    reverse_graph = {}
+
+    # Инициализируем ключи только для реальных пакетов графа (пропуская имя файла)
+    for parent, children in graph.items():
+        if parent != root_pkg:
+            if parent not in reverse_graph:
+                reverse_graph[parent] = []
+        for child in children:
+            if child not in reverse_graph:
+                reverse_graph[child] = []
+            if parent != root_pkg and parent not in reverse_graph[child]:
+                reverse_graph[child].append(parent)
+
+    return reverse_graph
+
 def validate_config(config: dict) -> None:
     """Проверяет обязательные параметры конфигурации."""
     req_fields = {
@@ -32,6 +51,7 @@ def validate_config(config: dict) -> None:
         "package_version": str,
         "output_image": str,
         "max_depth": int,
+        "reverse_target": str,
     }
 
     for field, exp_type in req_fields.items():
@@ -181,10 +201,31 @@ def build_dependency_graph_dfs(
 
     return graph, visited
 
+def run_stage_four(
+    graph: dict[str, list[str]],
+    root_pkg: str,
+    reverse_target: str
+) -> None:
+    """Выполняет поиск и вывод обратных зависимостей для Этапа 4."""
+    print(
+        f"\n[Этап 4] Поиск обратных зависимостей "
+        f"для пакета: '{reverse_target}'"
+    )
+    reverse_graph = get_reverse_dependencies(graph, root_pkg)
+
+    target_dependents = reverse_graph.get(reverse_target, [])
+    print(
+        f"Пакеты, которые зависят от "
+        f"'{reverse_target}': {target_dependents}"
+    )
+
+    print("\nПолный граф обратных зависимостей:")
+    for pkg, dependents in reverse_graph.items():
+        print(f"  {pkg} зависит от: {dependents}")
 
 def main() -> None:
     """Точка входа CLI-приложения."""
-    print("=== Инициализация CLI (Этап 3) ===")
+    print("=== Инициализация CLI (Этап 4) ===")
     try:
         config = load_config(CONFIG_FILE)
         validate_config(config)
@@ -193,18 +234,25 @@ def main() -> None:
         pkg_version = config["package_version"]
         repo_mode = config["repo_mode"]
         max_depth = config["max_depth"]
+        reverse_target = config["reverse_target"]
 
         pkg_map = {}
         if repo_mode == "test":
             pkg_map = fetch_test_graph_data(pkg_name)
+            root_pkg = list(pkg_map.keys())[0] if pkg_map else pkg_name
+        else:
+            root_pkg = pkg_name
 
         graph, _ = build_dependency_graph_dfs(
-            pkg_name, pkg_version, repo_mode, max_depth, pkg_map
+            root_pkg, pkg_version, repo_mode, max_depth, pkg_map
         )
 
-        print(f"\nРезультат построения графа (Узлов: {len(graph)}):")
+        print(f"\nРезультат построения прямого графа (Узлов: {len(graph)}):")
         for parent, children in graph.items():
             print(f"  {parent} -> {children}")
+
+        # Вызов вынесенной логики Этапа 4 в одну строку:
+        run_stage_four(graph, root_pkg, reverse_target)
 
     except (
             FileNotFoundError,
@@ -215,7 +263,6 @@ def main() -> None:
     ) as err:
         print(f"\n[ОШИБКА]: {err}", file=sys.stderr)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
