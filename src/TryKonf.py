@@ -1,5 +1,5 @@
+import os
 import sys
-from pathlib import Path
 import tomllib
 
 CONFIG_FILE = "config.toml"
@@ -8,10 +8,10 @@ ZERO_LIMIT = 0
 
 def load_config(file_path: str) -> dict:
     """Загружает и парсит TOML файл конфигурации."""
-    curr_dir = Path(__file__).resolve().parent
-    config_path = curr_dir / file_path
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(curr_dir, file_path)
 
-    if not config_path.exists():
+    if not os.path.exists(config_path):
         raise FileNotFoundError(
             f"Файл конфигурации '{file_path}' не найден."
         )
@@ -21,7 +21,6 @@ def load_config(file_path: str) -> dict:
             return tomllib.load(file_obj)
     except tomllib.TOMLDecodeError as err:
         raise ValueError(f"Ошибка синтаксиса TOML: {err}")
-
 
 def validate_config(config: dict) -> None:
     """Проверяет наличие и корректность типов всех обязательных параметров."""
@@ -71,9 +70,9 @@ def main() -> None:
         config = load_config(CONFIG_FILE)
         validate_config(config)
 
-        print("\n[Успешно] Параметры конфигурации:")
+        print("\nПараметры конфигурации:")
         for key, value in config.items():
-            print(f"{key} = {value}")
+            print(f"  - {key} = {value}")
 
     except (
         FileNotFoundError,
