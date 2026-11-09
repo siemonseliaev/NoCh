@@ -1,6 +1,6 @@
 package_name = "my_awesome_package"
 repo_url = "https://github.com/example/repo"
-repo_mode = "online"
+repo_mode = "test"
 package_version = "1.0.0"
 output_image = "output.png"
 max_depth = 3
