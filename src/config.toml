@@ -1,9 +1,7 @@
 package_name = "test_graph.json"
-repo_url = "local_test"
+repo_url = "https://github.com/example/repo"
 repo_mode = "test"
-package_version = "1.0.0"
+package_version = "1.0.2000"
 output_image = "output.png"
 max_depth = 3
-reverse_target = "A"
-
-title = "Приложение для анализа зависимостей (Этап 4)"
+reverse_target = "B"
