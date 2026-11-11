@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import json
 
-# Добавляем директорию src в системный путь для импорта
+
 sys.path.insert(
     0, str(Path(__file__).resolve().parent.parent / "src")
 )
@@ -54,12 +54,11 @@ class TestDependencyAnalyzerStage3(unittest.TestCase):
 
     def test_build_dependency_graph_dfs(self):
         """Проверка нерекурсивного DFS построения графа с циклами."""
-        # Тестовый граф с заглавными буквами и циклом (реквизит Этапа 3)
         mock_pkg_map = {
             "A": ["B", "C"],
             "B": ["D"],
             "C": [],
-            "D": ["A"]  # Цикл A -> B -> D -> A
+            "D": ["A"]
         }
 
         graph, visited = build_dependency_graph_dfs(
@@ -73,7 +72,6 @@ class TestDependencyAnalyzerStage3(unittest.TestCase):
         self.assertIn("A", graph)
         self.assertIn("B", graph["A"])
         self.assertIn("D", graph["B"])
-        # Проверяем, что граф успешно построился и не ушел в бесконечную рекурсию
         self.assertIsInstance(graph, dict)
 
 
