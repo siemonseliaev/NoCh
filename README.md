@@ -47,6 +47,6 @@
    package_name = "serde"
    repo_url = "[https://github.com/serde-rs/serde](https://github.com/serde-rs/serde)"
    repo_mode = "online"
-   package_version = "1.0.197"
+   package_version = "1.0.200"
    output_image = "graph.png"
    max_depth = 3
