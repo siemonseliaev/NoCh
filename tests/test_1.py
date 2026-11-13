@@ -1,12 +1,11 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from pathlib import Path
+import os
 import sys
 
-# Добавляем директорию src в системный путь для импорта
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent / "src")
-)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, os.path.join(parent_dir, "src"))
 
 from TryKonf import (
     load_config,
@@ -95,8 +94,6 @@ class TestCargoDependencyAnalyzer(unittest.TestCase):
         deps = fetch_cargo_dependencies(
             "serde", "1.0.0", "mode"
         )
-        # Так как mode не 'test' и не 'offline', он уйдет в online.
-        # Проверим разделение через отдельный вызов test:
         test_deps = fetch_cargo_dependencies(
             "serde", "1.0.0", "test"
         )
