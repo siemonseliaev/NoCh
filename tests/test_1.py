@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from pathlib import Path
+import os
 import sys
 import json
 
-# Добавляем директорию src в системный путь для импорта
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent / "src")
-)
+# Добавляем директорию src в системный путь с использованием os вместо pathlib
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, os.path.join(parent_dir, "src"))
 
 from TryKonf import (
     load_config,
@@ -21,7 +21,7 @@ from TryKonf import (
 class TestDependencyAnalyzerStage3(unittest.TestCase):
 
     def setUp(self):
-        """Создаем базовый корректный конфиг для тестов."""
+        """Создаем базовый корректный конфиг для тестов с учетом требований Этапа 4."""
         self.valid_config = {
             "package_name": "A",
             "repo_url": "test_graph.json",
@@ -29,6 +29,7 @@ class TestDependencyAnalyzerStage3(unittest.TestCase):
             "package_version": "1.0.0",
             "output_image": "output.png",
             "max_depth": 3,
+            "reverse_target": "B",  # Добавлено обязательное поле для 4-го этапа
         }
 
     def test_validate_config_success(self):
@@ -54,7 +55,7 @@ class TestDependencyAnalyzerStage3(unittest.TestCase):
 
     def test_build_dependency_graph_dfs(self):
         """Проверка нерекурсивного DFS построения графа с циклами."""
-        # Тестовый граф с заглавными буквами и циклом (реквизит Этапа 3)
+        # Тестовый граф с заглавными буквами и циклом
         mock_pkg_map = {
             "A": ["B", "C"],
             "B": ["D"],
@@ -73,9 +74,8 @@ class TestDependencyAnalyzerStage3(unittest.TestCase):
         self.assertIn("A", graph)
         self.assertIn("B", graph["A"])
         self.assertIn("D", graph["B"])
-        # Проверяем, что граф успешно построился и не ушел в бесконечную рекурсию
         self.assertIsInstance(graph, dict)
 
 
 if __name__ == "__main__":
-    main_res = unittest.main(exit=False)
+    unittest.main()
