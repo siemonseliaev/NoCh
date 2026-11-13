@@ -1,81 +1,96 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
+from unittest.mock import patch, mock_open
+import os
 import sys
-import json
 
-# Добавляем директорию src в системный путь для импорта
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent / "src")
-)
+# Добавляем директорию src в системный путь для импорта с использованием модуля os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+src_path = os.path.join(parent_dir, "src")
+sys.path.insert(0, src_path)
 
 from TryKonf import (
     load_config,
     validate_config,
-    fetch_test_graph_data,
-    build_dependency_graph_dfs,
-    fetch_online_dependencies,
 )
 
 
-class TestDependencyAnalyzerStage3(unittest.TestCase):
+class TestStage1Config(unittest.TestCase):
 
     def setUp(self):
-        """Создаем базовый корректный конфиг для тестов."""
+        """Создаем базовый корректный словарь конфигурации для тестов."""
         self.valid_config = {
-            "package_name": "A",
-            "repo_url": "test_graph.json",
+            "package_name": "serde",
+            "repo_url": "https://github.com/example/repo",
             "repo_mode": "test",
-            "package_version": "1.0.0",
+            "package_version": "1.0.200",
             "output_image": "output.png",
             "max_depth": 3,
         }
 
     def test_validate_config_success(self):
-        """Проверка успешной валидации корректного словаря."""
+        """Проверка успешной валидации корректного словаря конфигурации."""
         try:
             validate_config(self.valid_config)
         except Exception as e:
-            self.fail(f"validate_config вызвал исключение: {e}")
+            self.fail(f"validate_config вызвал непредвиденное исключение: {e}")
+
+    def test_missing_required_field(self):
+        """Проверка выброса KeyError, если отсутствует обязательный параметр."""
+        for field in self.valid_config.keys():
+            invalid_config = self.valid_config.copy()
+            del invalid_config[field]
+            with self.assertRaises(KeyError):
+                validate_config(invalid_config)
+
+    def test_invalid_type_field(self):
+        """Проверка выброса TypeError при неверном типе данных параметра."""
+        invalid_config = self.valid_config.copy()
+        invalid_config["package_name"] = 123
+        with self.assertRaises(TypeError):
+            validate_config(invalid_config)
+
+        invalid_config_bool = self.valid_config.copy()
+        invalid_config_bool["max_depth"] = True
+        with self.assertRaises(TypeError):
+            validate_config(invalid_config_bool)
 
     def test_negative_max_depth(self):
-        """Проверка ошибки ValueError при отрицательной глубине."""
+        """Проверка выброса ValueError при отрицательном значении max_depth."""
         invalid_config = self.valid_config.copy()
         invalid_config["max_depth"] = -1
         with self.assertRaises(ValueError):
             validate_config(invalid_config)
 
     def test_invalid_repo_mode(self):
-        """Проверка ошибки ValueError при некорректном режиме репозитория."""
+        """Проверка выброса ValueError при недопустимом значении repo_mode."""
         invalid_config = self.valid_config.copy()
-        invalid_config["repo_mode"] = "invalid_mode"
+        invalid_config["repo_mode"] = "unsupported_mode"
         with self.assertRaises(ValueError):
             validate_config(invalid_config)
 
-    def test_build_dependency_graph_dfs(self):
-        """Проверка нерекурсивного DFS построения графа с циклами."""
-        # Тестовый граф с заглавными буквами и циклом (реквизит Этапа 3)
-        mock_pkg_map = {
-            "A": ["B", "C"],
-            "B": ["D"],
-            "C": [],
-            "D": ["A"]  # Цикл A -> B -> D -> A
-        }
+    @patch("builtins.open", new_callable=mock_open, read_data=b"""
+        package_name = "serde"
+        repo_url = "https://github.com/example/repo"
+        repo_mode = "online"
+        package_version = "1.0.200"
+        output_image = "output.png"
+        max_depth = 5
+    """)
+    @patch("os.path.exists", return_value=True)
+    def test_load_config_success(self, mock_exists, mock_file):
+        """Проверка успешной загрузки и парсинга TOML файла."""
+        config = load_config("config.toml")
+        self.assertEqual(config["package_name"], "serde")
+        self.assertEqual(config["repo_mode"], "online")
+        self.assertEqual(config["max_depth"], 5)
 
-        graph, visited = build_dependency_graph_dfs(
-            root_pkg="A",
-            root_ver="1.0.0",
-            mode="test",
-            max_depth=3,
-            pkg_map=mock_pkg_map
-        )
-
-        self.assertIn("A", graph)
-        self.assertIn("B", graph["A"])
-        self.assertIn("D", graph["B"])
-        # Проверяем, что граф успешно построился и не ушел в бесконечную рекурсию
-        self.assertIsInstance(graph, dict)
+    @patch("os.path.exists", return_value=False)
+    def test_load_config_file_not_found(self, mock_exists):
+        """Проверка выброса FileNotFoundError, если файл конфигурации не существует."""
+        with self.assertRaises(FileNotFoundError):
+            load_config("nonexistent.toml")
 
 
 if __name__ == "__main__":
-    main_res = unittest.main(exit=False)
+    unittest.main()
