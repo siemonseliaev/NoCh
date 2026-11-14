@@ -1,6 +1,6 @@
 package_name = "test_graph.json"
 repo_url = "https://github.com/example/repo"
-repo_mode = "test"
+repo_mode = "online"
 package_version = "1.0.2000"
 output_image = "output.png"
 max_depth = 3
