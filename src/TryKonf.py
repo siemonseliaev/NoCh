@@ -123,7 +123,7 @@ def fetch_online_dependencies(
             )
             for dep in data.get("dependencies", []):
                 dep_name = dep.get("crate_id")
-                dep_req = dep.get("requirement")
+                dep_req = dep.get("req")
                 kind = dep.get("kind")
                 if kind in ("normal", "dev"):
                     dependencies.append(
