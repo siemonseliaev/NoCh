@@ -2,11 +2,11 @@
   <rect width="100%" height="100%" fill="#f4f4f4"/>
   <foreignObject x="20" y="20" width="560" height="360">
     <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">direction: right
-"A" -> "B"
-"A" -> "C"
-"C"
-"B" -> "D"
-"D" -> "A"
+"serde" -> "serde_derive"
+"serde_derive" -> "proc-macro2"
+"serde_derive" -> "quote"
+"serde_derive" -> "serde"
+"serde_derive" -> "syn"
 </div>
   </foreignObject>
 </svg>
