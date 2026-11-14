@@ -45,7 +45,7 @@ def validate_config(config: dict) -> None:
         val = config[field]
         is_bool = isinstance(val, bool)
         if not isinstance(val, exp_type) or (
-            exp_type is int and is_bool
+                exp_type is int and is_bool
         ):
             raise TypeError(
                 f"Неверный тип '{field}'. "
@@ -98,11 +98,33 @@ def fetch_offline_dependencies(package_name: str) -> dict:
     raise FileNotFoundError(f"Файл не найден: {local_path}")
 
 
+def fetch_crate_latest_version(package_name: str) -> str:
+    """Запросить самую свежую версию пакета с crates.io, если передана 'latest'."""
+    api_url = f"{CRATES_URL}/{package_name}"
+    headers = {"User-Agent": USER_AGENT}
+    req = urllib.request.Request(api_url, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            max_ver = data.get("crate", {}).get("max_version")
+            if max_ver:
+                return max_ver
+    except Exception:
+        pass
+    return "1.0.0"
+
+
+
 def fetch_online_dependencies(
-    package_name: str,
-    version: str
+        package_name: str,
+        version: str
 ) -> list[str]:
     """Загружает прямые зависимости с crates.io."""
+    # Если запрашивается "latest", сначала узнаем реальную актуальную версию пакета
+    if version == "latest":
+        version = fetch_crate_latest_version(package_name)
+
     dependencies = []
     api_url = f"{CRATES_URL}/{package_name}/{version}/dependencies"
     headers = {"User-Agent": USER_AGENT}
@@ -118,17 +140,17 @@ def fetch_online_dependencies(
                     dependencies.append(dep_name)
     except Exception as err:
         raise RuntimeError(
-            f"Ошибка API crates.io для {package_name}: {err}"
+            f"Ошибка API crates.io для {package_name} (версия {version}): {err}"
         )
 
     return dependencies
 
 
 def process_dependencies(
-    pkg: str,
-    ver: str,
-    mode: str,
-    pkg_map: dict
+        pkg: str,
+        ver: str,
+        mode: str,
+        pkg_map: dict
 ) -> list[str]:
     """Получает список зависимостей узла в зависимости от режима."""
     if mode == "test":
@@ -140,11 +162,11 @@ def process_dependencies(
 
 
 def build_dependency_graph_dfs(
-    root_pkg: str,
-    root_ver: str,
-    mode: str,
-    max_depth: int,
-    pkg_map: dict
+        root_pkg: str,
+        root_ver: str,
+        mode: str,
+        max_depth: int,
+        pkg_map: dict
 ) -> tuple[dict[str, list[str]], set[str]]:
     """Строит граф зависимостей с помощью нерекурсивного DFS."""
     graph = {}
@@ -159,8 +181,8 @@ def build_dependency_graph_dfs(
     while stack:
         pkg, ver, depth, current_path = stack.pop()
 
-        if pkg not in graph:
-            graph[pkg] = []
+        if pkg in graph:
+            continue
 
         if depth >= max_depth:
             visited.add(pkg)
@@ -168,11 +190,9 @@ def build_dependency_graph_dfs(
 
         try:
             raw_deps = process_dependencies(pkg, ver, mode, pkg_map)
+            graph[pkg] = raw_deps
 
             for dep in raw_deps:
-                if dep not in graph[pkg]:
-                    graph[pkg].append(dep)
-
                 if dep in current_path:
                     print(f"Циклическая зависимость: {pkg} -> {dep}")
                     continue
@@ -184,6 +204,7 @@ def build_dependency_graph_dfs(
             visited.add(pkg)
         except Exception as err:
             print(f"Ошибка обработки узла {pkg}: {err}")
+            graph[pkg] = []
 
     return graph, visited
 
@@ -215,11 +236,11 @@ def main() -> None:
             print(f"  {parent} -> {children}")
 
     except (
-        FileNotFoundError,
-        ValueError,
-        KeyError,
-        TypeError,
-        RuntimeError
+            FileNotFoundError,
+            ValueError,
+            KeyError,
+            TypeError,
+            RuntimeError
     ) as err:
         print(f"\n[ОШИБКА]: {err}", file=sys.stderr)
         sys.exit(1)
