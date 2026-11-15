@@ -94,51 +94,39 @@ def fetch_offline_dependencies(
 
 
 def fetch_online_dependencies(
-    package_name: str,
-    version: str
+        repo_url: str,
+        package_name: str,
+        version: str
 ) -> list[str]:
-    """Загружает прямые зависимости с crates.io."""
+    """Загружает прямые зависимости с использованием переданного URL репозитория."""
     dependencies = []
-    base_url = "https://crates.io/api/v1/crates"
-    api_url = (
-        f"{base_url}/{package_name}/"
-        f"{version}/dependencies"
-    )
+    base_url = repo_url.rstrip("/")
+    api_url = f"{base_url}/api/v1/crates/{package_name}/{version}/dependencies"
+
     headers = {
         "User-Agent": "DependencyAnalyzerCLI"
     }
-    req = urllib.request.Request(
-        api_url,
-        headers=headers
-    )
+    req = urllib.request.Request(api_url, headers=headers)
 
-    print(
-        f"Запрос к API "
-        f"для {package_name} ({version})"
-    )
     try:
         with urllib.request.urlopen(req) as resp:
-            data = json.loads(
-                resp.read().decode("utf-8")
-            )
+            data = json.loads(resp.read().decode("utf-8"))
             for dep in data.get("dependencies", []):
                 dep_name = dep.get("crate_id")
                 dep_req = dep.get("req")
                 kind = dep.get("kind")
                 if kind in ("normal", "dev"):
                     dependencies.append(
-                        f"{dep_name} = "
-                        f"\"{dep_req}\" ({kind})"
+                        f"{dep_name} = \"{dep_req}\" ({kind})"
                     )
     except Exception as err:
-        raise RuntimeError(
-            f"Ошибка API crates.io: {err}"
-        )
+        raise RuntimeError(f"Ошибка API репозитория: {err}")
 
     return dependencies
 
 
 def fetch_cargo_dependencies(
+    repo_url: str,
     package_name: str,
     version: str,
     mode: str
@@ -151,6 +139,7 @@ def fetch_cargo_dependencies(
             package_name
         )
     return fetch_online_dependencies(
+        repo_url,
         package_name,
         version
     )
@@ -170,8 +159,10 @@ def main() -> None:
         pkg_name = config["package_name"]
         pkg_version = config["package_version"]
         repo_mode = config["repo_mode"]
+        repo_url = config["repo_url"]
 
         dependencies = fetch_cargo_dependencies(
+            repo_url,
             pkg_name,
             pkg_version,
             repo_mode
