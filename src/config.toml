@@ -1,7 +1,8 @@
-package_name = "serde"
-repo_url = "https://github.com/serde-rs/serde"
-repo_mode = "online"
-package_version = "1.0.210"
+package_name = "A"
+repo_url = "test"
+repo_mode = "test"
+package_version = "1.0.0"
 output_image = "output.png"
-max_depth = 2
-reverse_target = "serde_derive"
+max_depth = 3
+reverse_target = "B"
+graph_file = "test_graph.json"

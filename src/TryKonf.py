@@ -11,6 +11,17 @@ USER_AGENT = "DependencyAnalyzerCLI (contact@example.com)"
 CRATES_URL = "https://crates.io/api/v1/crates"
 
 
+def is_valid_test_package_name(name: str) -> bool:
+    """Проверяет, что имя пакета состоит только из заглавных латинских букв."""
+    return (
+            isinstance(name, str)
+            and len(name) > 0
+            and name.isascii()
+            and name.isalpha()
+            and name.isupper()
+    )
+
+
 def load_config(file_path: str) -> dict:
     """Загружает и парсит TOML файл конфигурации."""
     config_path = os.path.join(BASE_DIR, file_path)
@@ -25,23 +36,57 @@ def load_config(file_path: str) -> dict:
         raise ValueError(f"Ошибка синтаксиса TOML: {err}")
 
 
-def get_reverse_dependencies(
-    graph: dict[str, list[str]], root_pkg: str
-) -> dict[str, list[str]]:
-    """Строит граф обратных зависимостей."""
+def get_reverse_graph(graph: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Строит полный граф обратных зависимостей (инвертирует рёбра исходного графа)."""
     reverse_graph = {}
+    all_nodes = set(graph.keys())
+    for children in graph.values():
+        all_nodes.update(children)
+
+    for node in all_nodes:
+        reverse_graph[node] = []
 
     for parent, children in graph.items():
-        if parent != root_pkg:
-            if parent not in reverse_graph:
-                reverse_graph[parent] = []
         for child in children:
-            if child not in reverse_graph:
-                reverse_graph[child] = []
-            if parent != root_pkg and parent not in reverse_graph[child]:
+            if parent not in reverse_graph[child]:
                 reverse_graph[child].append(parent)
 
     return reverse_graph
+
+
+def find_reverse_dependencies_dfs(
+        full_graph: dict[str, list[str]], target_pkg: str, max_depth: int
+) -> list[str]:
+    """
+    Находит все пакеты, зависящие от target_pkg, используя
+    нерекурсивный алгоритм DFS (соответствует требованиям 3-го и 4-го этапов).
+    """
+    reverse_graph = get_reverse_graph(full_graph)
+
+    if target_pkg not in reverse_graph:
+        return []
+
+    visited = set()
+    result = []
+    stack = [(target_pkg, 0)]
+
+    while stack:
+        pkg, depth = stack.pop()
+
+        if pkg in visited:
+            continue
+
+        visited.add(pkg)
+
+        if pkg != target_pkg:
+            result.append(pkg)
+
+        if depth < max_depth:
+            for neighbor in reverse_graph.get(pkg, []):
+                if neighbor not in visited:
+                    stack.append((neighbor, depth + 1))
+
+    return sorted(result)
 
 
 def validate_config(config: dict) -> None:
@@ -67,6 +112,19 @@ def validate_config(config: dict) -> None:
                 f"Неверный тип '{field}'. Ожидался {exp_type.__name__}"
             )
 
+    if config["repo_mode"] == "test":
+        if not is_valid_test_package_name(config["package_name"]):
+            raise ValueError(
+                "В режиме 'test' параметр 'package_name' должен состоять "
+                "только из заглавных латинских букв (A-Z)."
+            )
+        if "graph_file" not in config:
+            raise KeyError(
+                "В режиме 'test' обязательно наличие параметра 'graph_file'"
+            )
+        if not isinstance(config["graph_file"], str):
+            raise TypeError("Параметр 'graph_file' должен быть строкой")
+
     if config["max_depth"] < ZERO_LIMIT:
         raise ValueError("Параметр 'max_depth' < 0.")
 
@@ -76,15 +134,40 @@ def validate_config(config: dict) -> None:
 
 
 def fetch_test_graph_data(file_path: str) -> dict:
-    """Загружает граф тестового репозитория."""
+    """Загружает и валидирует граф тестового репозитория из JSON-файла."""
     local_path = (
         file_path if os.path.isabs(file_path) else os.path.join(BASE_DIR, file_path)
     )
     if not os.path.exists(local_path):
         raise FileNotFoundError(f"Тестовый файл графа не найден: {file_path}")
 
-    with open(local_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(local_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as err:
+        raise ValueError(f"Ошибка чтения тестового файла: {err}")
+
+    if not isinstance(data, dict):
+        raise ValueError("Тестовый граф должен быть JSON-объектом (словарём).")
+
+    for pkg, deps in data.items():
+        if not is_valid_test_package_name(pkg):
+            raise ValueError(
+                f"Некорректное имя пакета '{pkg}' в тестовом графе. "
+                "Допускаются только заглавные латинские буквы (A-Z)."
+            )
+        if not isinstance(deps, list):
+            raise ValueError(
+                f"Зависимости пакета '{pkg}' должны быть заданы списком."
+            )
+        for dep in deps:
+            if not is_valid_test_package_name(dep):
+                raise ValueError(
+                    f"Некорректное имя зависимости '{dep}' у пакета '{pkg}'. "
+                    "Допускаются только заглавные латинские буквы (A-Z)."
+                )
+
+    return data
 
 
 def fetch_offline_dependencies(package_name: str) -> dict:
@@ -148,7 +231,7 @@ def fetch_online_dependencies(package_name: str, version: str) -> list[str]:
 
 
 def process_dependencies(
-    pkg: str, ver: str, mode: str, pkg_map: dict
+        pkg: str, ver: str, mode: str, pkg_map: dict
 ) -> list[str]:
     """Получает список зависимостей узла в зависимости от режима."""
     if mode == "test":
@@ -160,7 +243,7 @@ def process_dependencies(
 
 
 def process_node_dependencies(
-    pkg: str, ver: str, mode: str, pkg_map: dict, ctx: tuple
+        pkg: str, ver: str, mode: str, pkg_map: dict, ctx: tuple
 ) -> None:
     """Обрабатывает дочерние зависимости текущего узла."""
     current_path, depth, max_depth, visited, graph, stack = ctx
@@ -177,7 +260,7 @@ def process_node_dependencies(
 
 
 def build_dependency_graph_dfs(
-    root_pkg: str, root_ver: str, mode: str, max_depth: int, pkg_map: dict
+        root_pkg: str, root_ver: str, mode: str, max_depth: int, pkg_map: dict
 ) -> tuple[dict[str, list[str]], set[str]]:
     """Строит граф зависимостей с помощью нерекурсивного DFS."""
     graph, visited = {}, set()
@@ -200,18 +283,13 @@ def build_dependency_graph_dfs(
 
 
 def run_stage_four(
-    graph: dict[str, list[str]], root_pkg: str, reverse_target: str
+        full_graph: dict[str, list[str]], reverse_target: str, max_depth: int
 ) -> None:
     """Выполняет поиск и вывод обратных зависимостей для Этапа 4."""
     print(f"\nДля целевого пакета: '{reverse_target}'")
-    reverse_graph = get_reverse_dependencies(graph, root_pkg)
 
-    target_dependents = reverse_graph.get(reverse_target, [])
+    target_dependents = find_reverse_dependencies_dfs(full_graph, reverse_target, max_depth)
     print(f"Пакеты, которые зависят от '{reverse_target}': {target_dependents}")
-
-    print("\nПолный граф обратных зависимостей:")
-    for pkg, dependents in reverse_graph.items():
-        print(f"  {pkg} зависит от: {dependents}")
 
 
 def main() -> None:
@@ -228,10 +306,15 @@ def main() -> None:
 
         pkg_map = {}
         if repo_mode == "test":
-            pkg_map = fetch_test_graph_data(pkg_name)
-            root_pkg = list(pkg_map.keys())[0] if pkg_map else pkg_name
+            graph_file_path = config["graph_file"]
+            pkg_map = fetch_test_graph_data(graph_file_path)
+            root_pkg = pkg_name
+            full_graph = pkg_map
         else:
-            root_pkg = pkg_name  # В онлайн-режиме корень — имя пакета из конфига
+            root_pkg = pkg_name
+            full_graph, _ = build_dependency_graph_dfs(
+                root_pkg, pkg_version, repo_mode, max_depth, pkg_map
+            )
 
         graph, _ = build_dependency_graph_dfs(
             root_pkg, pkg_version, repo_mode, max_depth, pkg_map
@@ -241,14 +324,14 @@ def main() -> None:
         for parent, children in graph.items():
             print(f"  {parent} -> {children}")
 
-        run_stage_four(graph, root_pkg, reverse_target)
+        run_stage_four(full_graph, reverse_target, max_depth)
 
     except (
-        FileNotFoundError,
-        ValueError,
-        KeyError,
-        TypeError,
-        RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            KeyError,
+            TypeError,
+            RuntimeError,
     ) as err:
         print(f"\n[ОШИБКА]: {err}", file=sys.stderr)
         sys.exit(1)
