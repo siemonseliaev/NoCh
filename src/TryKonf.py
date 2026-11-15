@@ -11,6 +11,17 @@ USER_AGENT = "DependencyAnalyzerCLI"
 CRATES_URL = "https://crates.io/api/v1/crates"
 
 
+def is_valid_test_package_name(name: str) -> bool:
+    """Проверяет, что имя пакета состоит только из заглавных латинских букв."""
+    return (
+            isinstance(name, str)
+            and len(name) > 0
+            and name.isascii()
+            and name.isalpha()
+            and name.isupper()
+    )
+
+
 def load_config(file_path: str) -> dict:
     """Загружает и парсит TOML файл конфигурации."""
     config_path = os.path.join(BASE_DIR, file_path)
@@ -41,17 +52,23 @@ def validate_config(config: dict) -> None:
     for field, exp_type in req_fields.items():
         if field not in config:
             raise KeyError(f"Отсутствует параметр: '{field}'")
-
-        val = config[field]
-        is_bool = isinstance(val, bool)
-        if not isinstance(val, exp_type) or (
-                exp_type is int and is_bool
-        ):
+        if not isinstance(config[field], exp_type):
             raise TypeError(
-                f"Неверный тип '{field}'. "
-                f"Ожидался {exp_type.__name__}, "
-                f"получен {type(val).__name__}"
+                f"Параметр '{field}' должен быть типа {exp_type.__name__}"
             )
+
+    if config["repo_mode"] == "test":
+        if not is_valid_test_package_name(config["package_name"]):
+            raise ValueError(
+                "В режиме 'test' параметр 'package_name' должен состоять "
+                "только из заглавных латинских букв (A-Z)."
+            )
+        if "graph_file" not in config:
+            raise KeyError(
+                "В режиме 'test' обязательно наличие параметра 'graph_file'"
+            )
+        if not isinstance(config["graph_file"], str):
+            raise TypeError("Параметр 'graph_file' должен быть строкой")
 
     if config["max_depth"] < ZERO_LIMIT:
         raise ValueError("Параметр 'max_depth' < 0.")
@@ -59,13 +76,12 @@ def validate_config(config: dict) -> None:
     valid_modes = ["online", "offline", "test"]
     if config["repo_mode"] not in valid_modes:
         raise ValueError(
-            f"Некорректный режим 'repo_mode': "
-            f"'{config['repo_mode']}'"
+            f"Некорректный режим 'repo_mode': '{config['repo_mode']}'"
         )
 
 
 def fetch_test_graph_data(file_path: str) -> dict:
-    """Загружает граф тестового репозитория из JSON-файла."""
+    """Загружает и валидирует граф тестового репозитория из JSON-файла."""
     if os.path.isabs(file_path):
         local_path = file_path
     else:
@@ -78,9 +94,31 @@ def fetch_test_graph_data(file_path: str) -> dict:
 
     try:
         with open(local_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except Exception as err:
         raise ValueError(f"Ошибка чтения тестового файла: {err}")
+
+    if not isinstance(data, dict):
+        raise ValueError("Тестовый граф должен быть JSON-объектом (словарём).")
+
+    for pkg, deps in data.items():
+        if not is_valid_test_package_name(pkg):
+            raise ValueError(
+                f"Некорректное имя пакета '{pkg}' в тестовом графе. "
+                "Допускаются только заглавные латинские буквы (A-Z)."
+            )
+        if not isinstance(deps, list):
+            raise ValueError(
+                f"Зависимости пакета '{pkg}' должны быть заданы списком."
+            )
+        for dep in deps:
+            if not is_valid_test_package_name(dep):
+                raise ValueError(
+                    f"Некорректное имя зависимости '{dep}' у пакета '{pkg}'. "
+                    "Допускаются только заглавные латинские буквы (A-Z)."
+                )
+
+    return data
 
 
 def fetch_offline_dependencies(package_name: str) -> dict:
@@ -115,13 +153,11 @@ def fetch_crate_latest_version(package_name: str) -> str:
     return "1.0.0"
 
 
-
 def fetch_online_dependencies(
         package_name: str,
         version: str
 ) -> list[str]:
     """Загружает прямые зависимости с crates.io."""
-    # Если запрашивается "latest", сначала узнаем реальную актуальную версию пакета
     if version == "latest":
         version = fetch_crate_latest_version(package_name)
 
@@ -168,14 +204,14 @@ def build_dependency_graph_dfs(
         max_depth: int,
         pkg_map: dict
 ) -> tuple[dict[str, list[str]], set[str]]:
-    """Строит граф зависимостей с помощью нерекурсивного DFS."""
+    """Строит граф зависимостей с помощью нерекурсивного DFS с корректным учетом max_depth."""
     graph = {}
     visited = set()
     stack = [(root_pkg, root_ver, 0, {root_pkg})]
 
     print(
         f"\n[Этап 3] Построение графа (DFS, "
-        f"max_depth={max_depth}, mode={mode})..."
+        f"max_depth={max_depth}, mode={mode})"
     )
 
     while stack:
@@ -185,23 +221,27 @@ def build_dependency_graph_dfs(
             continue
 
         if depth >= max_depth:
+            graph[pkg] = []
             visited.add(pkg)
             continue
 
         try:
             raw_deps = process_dependencies(pkg, ver, mode, pkg_map)
-            graph[pkg] = raw_deps
 
+            valid_deps = []
             for dep in raw_deps:
                 if dep in current_path:
                     print(f"Циклическая зависимость: {pkg} -> {dep}")
                     continue
+                valid_deps.append(dep)
 
-                if depth + 1 < max_depth:
+                if depth + 1 <= max_depth:
                     new_path = current_path | {dep}
                     stack.append((dep, "latest", depth + 1, new_path))
 
+            graph[pkg] = valid_deps
             visited.add(pkg)
+
         except Exception as err:
             print(f"Ошибка обработки узла {pkg}: {err}")
             graph[pkg] = []
@@ -222,8 +262,9 @@ def main() -> None:
 
         pkg_map = {}
         if repo_mode == "test":
-            pkg_map = fetch_test_graph_data(pkg_name)
-            root_package = list(pkg_map.keys())[0] if pkg_map else pkg_name
+            graph_file_path = config["graph_file"]
+            pkg_map = fetch_test_graph_data(graph_file_path)
+            root_package = pkg_name
         else:
             root_package = pkg_name
 
