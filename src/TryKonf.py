@@ -113,8 +113,8 @@ def fetch_online_dependencies(
     )
 
     print(
-        f"[Режим ONLINE] Запрос к API "
-        f"для {package_name} ({version})..."
+        f"Запрос к API "
+        f"для {package_name} ({version})"
     )
     try:
         with urllib.request.urlopen(req) as resp:
@@ -158,7 +158,6 @@ def fetch_cargo_dependencies(
 
 def main() -> None:
     """Точка входа CLI-приложения."""
-    print("=== Инициализация CLI (Этап 2) ===")
     try:
         config = load_config(CONFIG_FILE)
         validate_config(config)
